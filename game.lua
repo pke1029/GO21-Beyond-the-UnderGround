@@ -378,7 +378,7 @@ Face = {
 				if Face.isccw(x1, y1, x2, y2, x3, y3) then return end
 				tri(x1, y1, x2, y2, x3, y3, self.col)
 				tri(x2, y2, x3, y3, x4, y4, self.col)
-				Face.quadb(x1, y1, x2, y2, x3, y3, x4, y4, 1)
+				Face.quadb(x1, y1, x2, y2, x3, y3, x4, y4, 14)
 			end,
 
 			drawTex = function(self)
@@ -406,6 +406,12 @@ Face = {
 				Face.quadb(x1, y1, x2, y2, x3, y3, x4, y4, self.col)
 			end,
 
+			flip = function(self)
+				local u1, u2, u3, u4 = table.unpack(self.verts)
+				self.verts = {u2, u1, u4, u3}
+				return self
+			end
+
 		}
 	},
 
@@ -427,7 +433,7 @@ Face = {
 
 	zsort = function(u, v)
 		return Vec.dot(camera.o, u) < Vec.dot(camera.o, u)
-	end
+	end,
 
 }
 
@@ -436,8 +442,7 @@ camera = {
 	o = Vec.new(0, 0, 1),
 	x = Vec.new(1, 0, 0),
 	y = Vec.new(0, 1, 0),
-	-- target_ax = -PI/6,
-	target_ax = -0.52,
+	target_ax = -PI/6,
 	target_ay = PI/4,
 	lerp_fac = 0.12,
 	pos = 0,
@@ -446,6 +451,9 @@ camera = {
 	target_h = 0,
 	h = 0,
 
+	tick_x = 190,
+	tick_y = H2-3,
+
 	load = function(self)
 
 	end,
@@ -453,8 +461,8 @@ camera = {
 	update = function(self)
 		-- if key(23) then self.ax = self.ax + 0.03 end
 		-- if key(19) then self.ax = self.ax - 0.03 end
-		-- if key(1) then self.ay = self.ay + 0.03 end
-		-- if key(4) then self.ay = self.ay - 0.03 end
+		if key(1) then self.target_ay = self.target_ay + 0.03 end
+		if key(4) then self.target_ay = self.target_ay - 0.03 end
 		self.ax = mathFun.lerp(self.lerp_fac, self.ax, self.target_ax)
 		self.ay = mathFun.lerp(self.lerp_fac, self.ay, self.target_ay)
 		self.o = Vec.new(0, 0, 1):rotate(self.ax, self.ay, 0)
@@ -471,51 +479,22 @@ camera = {
 		self.pos = self.pos + n
 	end,
 
+	drawTicks = function(self)
+		local c = cos(self.ax)
+		for i = 0,terrain.n,5 do
+			print(-i, self.tick_x, self.tick_y+(i-0.5)*terrain.h*c-camera.h, 13)
+		end
+	end,
+
 }
 
 Voxel = {
 
-	mesh_id = {
-		{1,1}, {1,2}, {1,3}, {1,4},
-		{1,5}, {2,5}, {3,5}, {4,5},
-		{5,5}, {5,4}, {5,3}, {5,2},
-		{5,1}, {4,1}, {3,1}, {2,1}
-	},
-	color_id = {[0]=0, [1]=3, [2]=5, [3]=13},
+	render_radius = 16,
 
-	new = function(i, j, type)
-		if type == nil then type = 0 end
-		local col = Voxel.color_id[type]
-		local faces = {}
-		if type ~= 0 then 
-			local a, b = table.unpack(Voxel.mesh_id[j])
-			local y = Vec.new(0, -(i-1) * terrain.w, 0)
-			local u1 = terrain.mesh[a][b] + y
-			local u2 = terrain.mesh[a+1][b] + y
-			local u3 = terrain.mesh[a][b+1] + y
-			local u4 = terrain.mesh[a+1][b+1] + y
-			if i > 1 and terrain.data[i-1][j] == 0 then
-				local f = Face.new({u1, u2, u3, u4}, {}, col)
-				table.insert(faces, f)
-			-- elseif i == 1 then
-			-- 	local f = Face.new({u1, u2, u3, u4}, {}, col)
-			-- 	table.insert(faces, f)
-			end
-			y = Vec.new(0, -terrain.w, 0)
-			local v1 = u1 + y
-			local v2 = u2 + y
-			local v3 = u3 + y
-			local v4 = u4 + y
-			local f1 = Face.new({u1, u3, v1, v3}, {}, col)
-			local f2 = Face.new({u3, u4, v3, v4}, {}, col)
-			local f3 = Face.new({u4, u2, v4, v2}, {}, col)
-			local f4 = Face.new({u2, u1, v2, v1}, {}, col)
-			table.insert(faces, f1)
-			table.insert(faces, f2)
-			table.insert(faces, f3)
-			table.insert(faces, f4)
-		end
-		local v = {i=i, j=j, type=type, faces=faces}
+	new = function(f1, f2, f3, f4, f5, o, r)
+		if r == nil then r = Voxel.render_radius end
+		local v = {f1=f1, f2=f2, f3=f3, f4=f4, f5=f5, o=o, r=r}
 		setmetatable(v, Voxel.mt)
 		return v
 	end,
@@ -525,9 +504,14 @@ Voxel = {
 		__index = {
 
 			draw = function(self)
-				-- check if layer on frame
-				for k = 1,#self.faces do
-					self.faces[k]:drawCol()
+				-- check if voxel on frame
+				local x, y = self.o:proj(camera)
+				if y+self.r > 0 and y-self.r < HEIGHT then 
+					if self.f1 ~= nil then self.f1:drawCol() end
+					if self.f2 ~= nil then self.f2:drawCol() end
+					if self.f3 ~= nil then self.f3:drawCol() end
+					if self.f4 ~= nil then self.f4:drawCol() end
+					if self.f5 ~= nil then self.f5:drawCol() end
 				end
 			end,
 
@@ -538,29 +522,39 @@ Voxel = {
 
 terrain = {
 
-	n = 10, 	-- height
+	n = 100, 	-- height
 	m = 5,		-- depth
 	w = 12*sqrt2,		-- voxel width
-	h = 8.5,
+	h = 16,				-- voxel height
 
 	mesh = {},
 	faces = {},
 	data = {{}},
-	voxels = {{}},
+	voxels = {{{}}},
 	order = {},
-	tile_id = {[0]=0, [1]=2, [2]=4, [3]=6},
+	sprites = {{}},
 
-	l = 4*20,
-	tick_x = 190,
-	tick_y = H2-3,
+	mesh_id = {
+		{1,1}, {1,2}, {1,3}, {1,4},
+		{1,5}, {2,5}, {3,5}, {4,5},
+		{5,5}, {5,4}, {5,3}, {5,2},
+		{5,1}, {4,1}, {3,1}, {2,1}
+	},
+	color_id = {[0]=0, [1]=3, [2]=5, [3]=13},
+	tile_id = {[0]=0, [1]=2, [2]=4, [3]=6},
+	data_id = {
+		{1, 2, 3, 4, 5},
+		{16, nil, nil, nil, 6},
+		{15, nil, nil, nil, 7},
+		{14, nil, nil, nil, 8},
+		{13, 12, 11, 10, 9},
+	},
 
 	load = function(self)
 		self:loadMesh()
-		-- self:loadTiles()
-		self:loadFaces()
 		self:loadData()
-		self:loadMap()
 		self:loadVoxels()
+		self:loadSprites()
 	end,
 
 	loadMesh = function(self)
@@ -605,140 +599,149 @@ terrain = {
 		end
 	end,
 
-	-- loadTiles = function(self)
-	-- 	self.tiles = {}
-	-- 	for i = 1,self.m do
-	-- 		for j = 1,self.m do
-	-- 			local u1 = self.mesh[i][j]
-	-- 			local u2 = self.mesh[i+1][j]
-	-- 			local u3 = self.mesh[i][j+1]
-	-- 			local u4 = self.mesh[i+1][j+1]
-	-- 			local f = Face.new({u1, u2, u3, u4}, {}, 1)
-	-- 			table.insert(self.tiles, f)
-	-- 		end
-	-- 	end
-	-- end,
-
-	-- drawTiles = function(self)
-	-- 	for i,f in ipairs(self.tiles) do
-	-- 		f:drawCol()
-	-- 	end
-	-- end,
-
-	loadFaces = function(self)
-		self.faces = {}
-		local n = self.n 
-		local m = self.m
-		-- top
-		local u1 = self.mesh[1][1]
-		local u2 = self.mesh[m+1][1]
-		local u3 = self.mesh[1][m+1]
-		local u4 = self.mesh[m+1][m+1]
-		local a = 16*m
-		local f0 = Face.new({u1, u2, u3, u4}, {0, 0, a, a}, 3)
-		table.insert(self.faces, f0)
-		-- side
-		local y = -n * terrain.w
-		v1 = u1 + Vec.new(0, y, 0)
-		v2 = u2 + Vec.new(0, y, 0)
-		v3 = u3 + Vec.new(0, y, 0)
-		v4 = u4 + Vec.new(0, y, 0)
-		local x = 16*m
-		local y = 16*n
-		local f1 = Face.new({u1, u3, v1, v3}, {x, 0, 2*x, y}, 5)
-		local f2 = Face.new({u3, u4, v3, v4}, {2*x-16, 0, 3*x-16, y}, 5)
-		local f3 = Face.new({u4, u2, v4, v2}, {3*x-32, 0, 4*x-32, y}, 5)
-		local f4 = Face.new({u2, u1, v2, v1}, {4*x-48, 0, 5*x-48, y}, 5)
-		table.insert(self.faces, f1)
-		table.insert(self.faces, f2)
-		table.insert(self.faces, f3)
-		table.insert(self.faces, f4)
-	end,
-
-	drawFaces = function(self)
-		for i = 2,#self.faces do
-			self.faces[i]:drawTex()
-			-- self.faces[i]:drawCol()
-		end
-		-- top
-		self.faces[1]:drawCol()
-		self.faces[1]:drawTex()
-
-		self:drawTicks()
-	end,
-
-	-- draw = function(self)
-	-- 	self.faces[1]:drawCol()
-	-- 	self.faces[1]:drawTex()
-	-- end,
-
-	mset = function(self, j, i, id)
-		local x0 = 2*self.m
-		local i = 2*(i-1)
-		local j = 2*(j-1)
-		mset(x0+i, j, id)
-		mset(x0+i+1, j, id+1)
-		mset(x0+i, j+1, id+16)
-		mset(x0+i+1, j+1, id+17)
-		if i == 0 then
-			i = 8*(self.m-1)
-			mset(x0+i, j, id)
-			mset(x0+i+1, j, id+1)
-			mset(x0+i, j+1, id+16)
-			mset(x0+i+1, j+1, id+17)
-		end
-	end,
-
 	loadVoxels = function(self)
 		local voxels = {}
-		local n, m = self.data:size()
+		local n = self.n 
+		local m = self.m
 		for i = 1,n do
 			voxels[i] = {}
 			for j = 1,m do
-				voxels[i][j] = Voxel.new(i, j, self.data[i][j])
+				voxels[i][j] = {}
+				for k = 1,m do
+					voxels[i][j][k] = self:getVoxel(i, j, k)
+				end
 			end
 		end
+		-- tree voxel
+		local u1 = self.mesh[3][3]
+		local u2 = self.mesh[4][3]
+		local u3 = self.mesh[3][4]
+		local u4 = self.mesh[4][4]
+		local f5 = Face.new({u1, u2, u3, u4}, {}, 5)
+		voxels[1][3][3] = Voxel.new(nil, nil, nil, nil, f5, (u1+u3)/2)
 		self.voxels = voxels
 		-- create list for sorting
 		local order = {}
 		for j = 1,m do
-			local a, b = table.unpack(Voxel.mesh_id[j])
-			table.insert(order, {j, terrain.mesh[a][b]})
+			for k = 1,m do
+				table.insert(order, {terrain.mesh[j][k], j, k})
+			end
 		end
 		self.order = order
 	end,
 
-	drawVoxels = function(self)
+	loadSprites = function(self)
 		local n, m = self.data:size()
+		local sprites = Mat.newZeros(n, m, 0)
+		for i = 2,n-1 do
+			for j = 1,m do
+				if self.data[i][j] == 0 and self.data[i+1][j] ~= 0 then
+					local a, b = table.unpack(self.mesh_id[j])
+					local o = self.mesh[a][b] + Vec.new(self.w/2, -i*self.h, self.w/2)
+					if random() > 0.5 then
+						sprites[i][j] = Sprite.new(260, o, 1, 1)
+					else
+						sprites[i][j] = 0
+					end
+				else
+					sprites[i][j] = 0
+				end
+			end
+		end
+		self.sprites = sprites
+	end,
+
+	drawVoxels = function(self)
+		local n = self.n 
+		local m = self.m
 		table.sort(self.order, self.sortOrder)
-		for i = n,1,-1 do
-			for k,v in ipairs(self.order) do
-				local j = v[1]
-				self.voxels[i][j]:draw()
+		for _,v in ipairs(self.order) do
+			local j = v[2]
+			local k = v[3]
+			for i = n,1,-1 do
+				if self.voxels[i][j][k] ~= nil then	
+					self.voxels[i][j][k]:draw()
+				else
+					local data_id = self.data_id[j][k]
+					if data_id ~= nil then
+						if self.sprites[i][data_id] ~= 0 then
+							self.sprites[i][data_id]:draw()
+						end
+					end
+				end
 			end
 		end
 	end,
 
-	drawTicks = function(self)
-		for i = 0,self.n-1,5 do
-			print(-i, self.tick_x, self.tick_y+i*self.w-camera.h, 1)
+	getVoxel = function(self, i, j, k)
+		-- coords
+		local dy = Vec.new(0, -self.h, 0)
+		local y = (i-1)*dy
+		local u1 = self.mesh[j][k] + y
+		local u2 = self.mesh[j+1][k] + y
+		local u3 = self.mesh[j][k+1] + y
+		local u4 = self.mesh[j+1][k+1] + y
+		local v1 = u1 + dy
+		local v2 = u2 + dy
+		local v3 = u3 + dy
+		local v4 = u4 + dy
+		-- generate faces
+		local faces = {}
+		local data_id = self.data_id[j][k]
+		if data_id ~= nil then
+			local type = self.data[i][data_id]
+			if type ~= 0 then
+				local col = self.color_id[type]
+				local f1 = Face.new({u1, u3, v1, v3}, {}, col)
+				local f2 = Face.new({u3, u4, v3, v4}, {}, col)
+				local f3 = Face.new({u4, u2, v4, v2}, {}, col)
+				local f4 = Face.new({u2, u1, v2, v1}, {}, col)
+				if mathFun.isin(data_id, {2, 3, 4}) then f3 = nil
+				elseif mathFun.isin(data_id, {6, 7, 8}) then f4 = nil
+				elseif mathFun.isin(data_id, {10, 11, 12}) then f1 = nil
+				elseif mathFun.isin(data_id, {14, 15, 16}) then f2 = nil
+				end
+				-- top face	
+				local f5
+				if i > 1 and self.data[i-1][data_id] == 0 then
+					f5 = Face.new({u1, u2, u3, u4}, {}, col)
+				elseif i == 1 then
+					f5 = Face.new({u1, u2, u3, u4}, {}, 3)
+				end
+				local o = (u1+v4)/2
+				return Voxel.new(f1, f2, f3, f4, f5, o)
+			else
+				-- empty block
+				return nil 
+			end
+		elseif j == 3 and k == 3 then 
+			-- center column
+			return nil
+		else
+			local type = mathFun.randlist({2,3})
+			local col = self.color_id[type]
+			local f1, f2, f3, f4, f5
+			if j == 2 then f1 = Face.new({u1, u3, v1, v3}, {}, col) end
+			if j == 4 then f3 = Face.new({u4, u2, v4, v2}, {}, col) end
+			if k == 2 then f4 = Face.new({u2, u1, v2, v1}, {}, col) end
+			if k == 4 then f2 = Face.new({u3, u4, v3, v4}, {}, col) end
+			if i == 1 then f5 = Face.new({u1, u2, u3, u4}, {}, 3) end
+			local o = (u1+v4)/2
+			return Voxel.new(f1, f2, f3, f4, f5, o)
 		end
 	end,
 
 	sortOrder = function(u, v)
-		return Vec.dot(camera.o, u[2]) < Vec.dot(camera.o, v[2])
-	end
+		return Vec.dot(camera.o, u[1]) < Vec.dot(camera.o, v[1])
+	end,
 
 }
 
 Sprite = {
 
-	obj = {},
-
-	new = function(spr, u, w, h)
-		local s = {spr=spr, u=u, w=w, h=h}
+	new = function(spr, o, w, h)
+		local s = {spr=spr, o=o, w=w, h=h}
 		setmetatable(s, Sprite.mt)
-		table.insert(Sprite.obj, s)
 		return s
 	end,
 
@@ -747,19 +750,12 @@ Sprite = {
 		__index	= {
 
 			draw = function(self)
-				local x, y = self.u:proj(camera) 
+				local x, y = self.o:proj(camera) 
 				spr(self.spr, x-8*self.w/2, y-8*self.h, 0, 1, 0, 0, self.w, self.h)
 			end
 
 		}
 	},
-
-	draw = function(self)
-		-- table.sort(self.obj, self.ysort)
-		for i,v in ipairs(self.obj) do
-			v:draw()
-		end
-	end,
 
 	ysort = function(u, v)
 		return u[2] < v[2]
@@ -769,45 +765,53 @@ Sprite = {
 
 player = {
 
-	r = 0,
+	
 	dr = 0,
 	o = Vec.new(0, 0, 0),
 	speed = 1,
 	is_left = false,
-	target_y = 0,
+	range = terrain.w * (terrain.m - 1),
+	r = 2 * terrain.w * (terrain.m - 1),
+	i = 0,
+	j = 9,
 
 	load = function(self)
-		
+		self.r = 2 * self.range
+		self.o = Vec.new(self.range/2, 0, self.range/2)
+		self.j = 2 * terrain.m - 1
 	end,
 
 	update = function(self)
 		-- movement
-		local d = 0
+		local coll = self:getCollision()
+		debugger.task[1] = coll[1]
+		debugger.task[2] = coll[2]
+		debugger.task[3] = coll[3]
+		debugger.task[4] = coll[4]
 		if btn(2) then 
-			d = d - self.speed
 			self.is_left = true 
+			self.r = self.r - self.speed
+			self.dr = self.dr - self.speed
 		end
 		if btn(3) then 
-			d = d + self.speed
 			self.is_left = false 
+			self.r = self.r + self.speed
+			self.dr = self.dr + self.speed
 		end
-		self.r = self.r + d
-		self.r = mathFun.mod(self.r, 4*terrain.l)
-		self.dr = self.dr + d
+		self.r = mathFun.mod(self.r, 4*self.range)
+		self.j = mathFun.mod(floor(self.r/terrain.w + 0.5), 16) + 1
+		debugger.task[5] = self.j
 
-		-- warp position
-		local dz = mathFun.clamp(-abs(self.r-1.5*terrain.l)+1.5*terrain.l, 0, terrain.l)
-		local dx = mathFun.clamp(-abs(self.r-2.5*terrain.l)+1.5*terrain.l, 0, terrain.l)
-		self.o = Vec.new(terrain.l/2-dx, 0, terrain.l/2-dz)
+		-- update position
+		local dx = mathFun.clamp(-abs(self.r-2.5*self.range)+1.5*self.range, 0, self.range)
+		local dz = mathFun.clamp(-abs(self.r-1.5*self.range)+1.5*self.range, 0, self.range)
+		self.o = Vec.new(-self.range/2+dx, 0, -self.range/2+dz)
 		
 		-- rotate camera
-		if abs(self.dr) >= terrain.l then
+		if abs(self.dr) >= self.range then
 			camera:rotateRightAngle(mathFun.sign(self.dr))
 			self.dr = 0
 		end
-
-		-- falling
-		self.tilenumber = mathFun.mod(floor(self.r/terrain.w + 0.5), 16) + 1
 
 	end,
 
@@ -820,14 +824,24 @@ player = {
 		end
 	end,
 
-	getFloor = function(self)
-		local n, m = terrain.data:size()
-		for i = 1,n do
-			if terrain.data[i][self.tilenumber] == nil then 
-				self.target_y = (i-1)*terrain.w
-				break 
-			end
+	getCollision = function(self)
+		local coll = {false, false, false, false, false, false}
+		-- up
+		if self.i > 1 then
+			coll[1] = terrain.data[self.i-1][self.j] ~= 0
 		end
+		-- down
+		if self.i < terrain.n then
+			coll[2] = terrain.data[self.i+1][self.j] ~= 0
+		end
+		-- layer 0
+		if self.i == 0 then return coll end
+		-- left and right
+		if self.j == 1 then jm1 = 16 else jm1 = self.j-1 end
+		if self.j == 16 then jp1 = 1 else jp1 = self.j+1 end
+		coll[3] = terrain.data[self.i][self.j-1] ~= 0
+		coll[4] = terrain.data[self.i][self.j+1] ~= 0
+		return coll
 	end
 
 }
@@ -889,6 +903,7 @@ background = {
 
 tree = {
 
+	trunk = nil, 
 	leaves = {},
 
 	load = function(self)
@@ -904,10 +919,11 @@ tree = {
 			end
 		end
 		-- load trunk
-		Sprite.new(288, Vec.new(0, -5, 0), 4, 4)
+		self.trunk = Sprite.new(288, Vec.new(0, -5, 0), 4, 4)
 	end,
 
 	draw = function(self)
+		self.trunk:draw()
 		for i = 1,#self.leaves do
 			local x, y = self.leaves[i]:proj(camera)
 			spr(292, x-8, y-8, 0, 1, 0, 0, 2, 2)
@@ -927,6 +943,7 @@ end
 background:load()
 camera:load()
 terrain:load()
+player:load()
 tree:load()
 
 function TIC()
@@ -937,15 +954,12 @@ function TIC()
 
 	cls(15)
 	background:draw()
+	camera:drawTicks()
 	
 	terrain:drawVoxels()
-	terrain.faces[1]:drawCol()
-	terrain.faces[1]:drawTex()
-	-- terrain:drawFaces()
 
-	Sprite:draw()
-	tree:draw()
 	player:draw()
+	tree:draw()
 
 	-- debug
 	time:draw()
@@ -1008,8 +1022,9 @@ end
 -- <SPRITES>
 -- 000:0000000000000044000004220000422200042222000422220004222100042226
 -- 001:0000000044000000224000002224000022224000252240005512400055640000
--- 002:0000000000000007000000970000099700009999000099990000999500009995
--- 003:0000000000070000797700007777000099990000999900005559000055600000
+-- 002:0000000000000000000000990000099900009999000099990000999500009995
+-- 003:0000000000000000999000009999000099990000959900005559000055500000
+-- 004:0044440004555740456665744566657445666574456665740455574000444400
 -- 016:000422220004222f0004222f000422250004222f000042250000044500000004
 -- 017:52240000ff240000ff24000055240000ff240000254000004500000004000000
 -- 018:0000999900009998000099980000999500009998000099950000000500000000
