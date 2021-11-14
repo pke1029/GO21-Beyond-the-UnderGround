@@ -53,10 +53,18 @@ debugger = {
 
 	task = {},
 
+	update = function(self)
+		self.task = {}
+	end,
+
 	draw = function(self)
 		for i = 1,#self.task do
 			print(self.task[i], 0, 7*(i-1), 1)
 		end
+	end,
+
+	trace = function(a)
+		debugger.task[#debugger.task+1] = a
 	end,
 
 }
@@ -386,15 +394,15 @@ Face = {
 				local x2, y2 = self.verts[2]:proj(camera)
 				local x3, y3 = self.verts[3]:proj(camera)
 				local x4, y4 = self.verts[4]:proj(camera)
-				-- trib(x1, y1, x2, y2, x3, y3, 12)
-				-- trib(x2, y2, x3, y3, x4, y4, 12)
 				if Face.isccw(x1, y1, x2, y2, x3, y3) then return end
-				local u1, v1, u2, v2 = table.unpack(self.uvs)
 				tri(x1, y1, x2, y2, x3, y3, self.col)
 				tri(x2, y2, x3, y3, x4, y4, self.col)
-				textri(x1, y1, x2, y2, x3, y3, u1, v1, u2-1, v1, u1, v2-1, true, 0)
-				textri(x2, y2, x3, y3, x4, y4, u2-1, v1, u1, v2-1, u2-1, v2-1, true, 0)
-				-- Face.border(x1, y1, x2, y2, x3, y3, x4, y4, 0)
+				if self.uvs[1] ~= nil then
+					local u1, v1, u2, v2 = table.unpack(self.uvs)
+					textri(x1, y1, x2, y2, x3, y3, u1, v1, u2-1, v1, u1, v2-1, false, 0)
+					textri(x2, y2, x3, y3, x4, y4, u2-1, v1, u1, v2-1, u2-1, v2-1, false, 0)
+				end
+				Face.border(x1, y1, x2, y2, x3, y3, x4, y4, 14)
 			end,
 
 			drawOutline = function(self)
@@ -410,7 +418,21 @@ Face = {
 				local u1, u2, u3, u4 = table.unpack(self.verts)
 				self.verts = {u2, u1, u4, u3}
 				return self
-			end
+			end,
+
+			draw = function(self, col, border)
+				local x1, y1 = self.verts[1]:proj(camera)
+				local x2, y2 = self.verts[2]:proj(camera)
+				local x3, y3 = self.verts[3]:proj(camera)
+				local x4, y4 = self.verts[4]:proj(camera)
+				if Face.isccw(x1, y1, x2, y2, x3, y3) then return end
+				if col == nil then col = self.col end
+				tri(x1, y1, x2, y2, x3, y3, col)
+				tri(x2, y2, x3, y3, x4, y4, col)
+				if border == true or border == nil then
+					Face.border(x1, y1, x2, y2, x3, y3, x4, y4, 14)
+				end
+			end,
 
 		}
 	},
@@ -472,7 +494,8 @@ camera = {
 		-- vertical motion
 		-- if key(23) then self.target_y2 = self.target_y2 + 1 end
 		-- if key(19) then self.target_y2 = self.target_y2 - 1 end
-		self.target_y2 = player.i * terrain.h 
+		self.target_y2 = player.i * terrain.h*cos(self.ax)
+		-- self.target_y2 = -player.y
 		self.y2 = mathFun.lerp(self.lerp_fac, self.y2, self.target_y2)
 	end,
 
@@ -506,15 +529,26 @@ Voxel = {
 		__index = {
 
 			draw = function(self)
-				-- check if voxel on frame
-				local x, y = self.o:proj(camera)
-				if y+self.r > 0 and y-self.r < HEIGHT then 
-					if self.f1 ~= nil then self.f1:drawCol() end
-					if self.f2 ~= nil then self.f2:drawCol() end
-					if self.f3 ~= nil then self.f3:drawCol() end
-					if self.f4 ~= nil then self.f4:drawCol() end
-					if self.f5 ~= nil then self.f5:drawCol() end
+				if self.f1 ~= nil then self.f1:draw() end
+				if self.f2 ~= nil then self.f2:draw() end
+				if self.f3 ~= nil then self.f3:draw() end
+				if self.f4 ~= nil then self.f4:draw() end
+				if self.f5 ~= nil then self.f5:draw() end
+			end,
+
+			drawTex = function(self)
+				if self:isonscreen() then 
+					if self.f1 ~= nil then self.f1:drawTex() end
+					if self.f2 ~= nil then self.f2:drawTex() end
+					if self.f3 ~= nil then self.f3:drawTex() end
+					if self.f4 ~= nil then self.f4:drawTex() end
+					if self.f5 ~= nil then self.f5:drawTex() end
 				end
+			end,
+
+			isonscreen = function(self)
+				local x, y = self.o:proj(camera)
+				return y+self.r > 0 and y-self.r < HEIGHT
 			end,
 
 		}
@@ -524,10 +558,11 @@ Voxel = {
 
 terrain = {
 
-	n = 100, 	-- height
+	n = 5, 	-- height
 	m = 5,		-- depth
-	w = 12*sqrt2,		-- voxel width
-	h = 16,				-- voxel height
+	w = 12*sqrt2,		-- voxel width (12)
+	h = 28/sqrt(3),		-- voxel height (14)
+	n_remove = 2, 	-- remove bottom layer
 
 	mesh = {},
 	faces = {},
@@ -554,6 +589,7 @@ terrain = {
 
 	load = function(self)
 		self:loadMesh()
+		math.randomseed(28)
 		self:loadData()
 		self:loadVoxels()
 		self:loadSprites()
@@ -585,6 +621,13 @@ terrain = {
 			data[i] = {}
 			for j = 1,m do
 				data[i][j] = mathFun.randlist({0, 2, 2, 3})
+			end
+		end
+		-- remove blocks
+		for j = 1,m do
+			local h = random(self.n_remove)
+			for i = n-h+1,n do
+				data[i][j] = 0
 			end
 		end
 		setmetatable(data, Mat.mt)
@@ -662,22 +705,27 @@ terrain = {
 			local k = v[3]
 			local data_id = self.data_id[j][k]
 			for i = n,1,-1 do
-				if self.voxels[i][j][k] ~= nil then	
-					self.voxels[i][j][k]:draw()
-				else
-					if data_id ~= nil then
-						if self.sprites[i][data_id] ~= 0 then
-							self.sprites[i][data_id]:draw()
+				if self.voxels[i][j][k] ~= nil then
+					-- check if voxel is on screen
+					if self.voxels[i][j][k]:isonscreen() then
+						self.voxels[i][j][k]:draw()
+						-- draw sprite
+						if data_id ~= nil then
+							if self.sprites[i][data_id] ~= 0 then
+								self.sprites[i][data_id]:draw()
+							end
 						end
 					end
 				end
-				if i == player.i and data_id == player.j then
-					player:draw()
-				end
+				if i == player.i and data_id == player.j then player:draw() end
 			end
 			-- layer 0
 			if player.i == 0 and data_id == player.j then player:draw() end
 			if j == 3 and k == 3 then tree:draw() end
+			if j == 4 and k == 3 then deco[1]:draw() end
+			-- if j == 2 and k == 4 then deco[2]:draw() end
+			-- if j == 3 and k == 2 then deco[3]:draw() end
+			if j == 2 and k == 4 then vending:draw() end
 		end
 	end,
 
@@ -693,6 +741,7 @@ terrain = {
 		local v2 = u2 + dy
 		local v3 = u3 + dy
 		local v4 = u4 + dy
+		local o = (u1+v4)/2
 		-- generate faces
 		local faces = {}
 		local data_id = self.data_id[j][k]
@@ -700,27 +749,31 @@ terrain = {
 			local type = self.data[i][data_id]
 			if type ~= 0 then
 				local col = self.color_id[type]
-				local f1 = Face.new({u1, u3, v1, v3}, {}, col)
-				local f2 = Face.new({u3, u4, v3, v4}, {}, col)
-				local f3 = Face.new({u4, u2, v4, v2}, {}, col)
-				local f4 = Face.new({u2, u1, v2, v1}, {}, col)
+				local tile = self.tile_id[type]
+				local uvs = {tile*8, 16, (tile+2)*8, 32}
+				local f1 = Face.new({u1, u3, v1, v3}, uvs, col)
+				local f2 = Face.new({u3, u4, v3, v4}, uvs, col)
+				local f3 = Face.new({u4, u2, v4, v2}, uvs, col)
+				local f4 = Face.new({u2, u1, v2, v1}, uvs, col)
 				if mathFun.isin(data_id, {2, 3, 4}) then f3 = nil
 				elseif mathFun.isin(data_id, {6, 7, 8}) then f4 = nil
 				elseif mathFun.isin(data_id, {10, 11, 12}) then f1 = nil
 				elseif mathFun.isin(data_id, {14, 15, 16}) then f2 = nil
 				end
-				-- top face	
+				-- top face
 				local f5
 				if i > 1 and self.data[i-1][data_id] == 0 then
-					f5 = Face.new({u1, u2, u3, u4}, {}, col)
+					uvs = {tile*8, 0, (tile+2)*8, 16}
+					f5 = Face.new({u1, u2, u3, u4}, uvs, col)
 				elseif i == 1 then
-					f5 = Face.new({u1, u2, u3, u4}, {}, 3)
+					tile = 2
+					uvs = {tile*8, 0, (tile+2)*8, 16}
+					f5 = Face.new({u1, u2, u3, u4}, uvs, 3)
 				end
-				local o = (u1+v4)/2
 				return Voxel.new(f1, f2, f3, f4, f5, o)
 			else
 				-- empty block
-				return nil 
+				return Voxel.new(nil, nil, nil, nil, nil, o) 
 			end
 		elseif j == 3 and k == 3 then 
 			-- center column
@@ -728,13 +781,16 @@ terrain = {
 		else
 			local type = mathFun.randlist({2,3})
 			local col = self.color_id[type]
+			local tile = self.tile_id[type]
+			local uvs = {tile*8, 16, (tile+2)*8, 32}
 			local f1, f2, f3, f4, f5
-			if j == 2 then f1 = Face.new({u1, u3, v1, v3}, {}, col) end
-			if j == 4 then f3 = Face.new({u4, u2, v4, v2}, {}, col) end
-			if k == 2 then f4 = Face.new({u2, u1, v2, v1}, {}, col) end
-			if k == 4 then f2 = Face.new({u3, u4, v3, v4}, {}, col) end
-			if i == 1 then f5 = Face.new({u1, u2, u3, u4}, {}, 3) end
-			local o = (u1+v4)/2
+			if j == 2 then f1 = Face.new({u1, u3, v1, v3}, uvs, col) end
+			if j == 4 then f3 = Face.new({u4, u2, v4, v2}, uvs, col) end
+			if k == 2 then f4 = Face.new({u2, u1, v2, v1}, uvs, col) end
+			if k == 4 then f2 = Face.new({u3, u4, v3, v4}, uvs, col) end
+			tile = 2
+			uvs = {tile*8, 0, (tile+2)*8, 16}
+			if i == 1 then f5 = Face.new({u1, u2, u3, u4}, uvs, 3) end
 			return Voxel.new(f1, f2, f3, f4, f5, o)
 		end
 	end,
@@ -788,6 +844,7 @@ player = {
 	speed_y = 0,
 	gravity = -500,
 	jump_vel = 0,
+	h = 14,
 
 	load = function(self)
 		self.r = 2 * self.range
@@ -800,28 +857,42 @@ player = {
 	update = function(self)
 		-- movement
 		local coll = self:getCollision()
-		debugger.task[1] = coll[1]
-		debugger.task[2] = coll[2]
-		debugger.task[3] = coll[3]
-		debugger.task[4] = coll[4]
+		debugger.trace(coll[3])
+		debugger.trace(coll[5])
+		debugger.trace(coll[4])
+		debugger.trace(coll[6])
+		debugger.trace(self.r) 
+		debugger.trace(self.j)
+		debugger.trace((self.r-self.speed_x)/terrain.w+1.5)
 		if btn(2) then 
 			self.is_left = true 
-			self.r = self.r - self.speed_x
-			self.dr = self.dr - self.speed_x
+			if not (coll[3] or coll[5]) then
+				self.r = self.r - self.speed_x
+				self.dr = self.dr - self.speed_x
+			elseif mathFun.mod((self.r-self.speed_x)/terrain.w + 0.5, 16) + 1 >= self.j then
+				self.r = self.r - self.speed_x
+				self.dr = self.dr - self.speed_x
+			end
 		end
 		if btn(3) then 
 			self.is_left = false 
-			self.r = self.r + self.speed_x
-			self.dr = self.dr + self.speed_x
+			if not (coll[4] or coll[6]) then
+				self.r = self.r + self.speed_x
+				self.dr = self.dr + self.speed_x
+			elseif mathFun.mod((self.r + self.speed_x)/terrain.w + 0.5, 16) < self.j then
+				self.r = self.r + self.speed_x
+				self.dr = self.dr + self.speed_x
+			end
 		end
 		self.r = mathFun.mod(self.r, 4*self.range)
 		self.j = mathFun.mod(floor(self.r/terrain.w + 0.5), 16) + 1
 		
 		-- jump
+		coll = self:getCollision()
 		if keyp(48) then 
 			self.speed_y = self.jump_vel
 		end
-		self.speed_y = mathFun.clamp(self.speed_y + self.gravity*time.dt/1000, -self.jump_vel, self.jump_vel) 
+		self.speed_y = mathFun.clamp(self.speed_y + self.gravity*time.dt/1000, -1.2*self.jump_vel, 1.2*self.jump_vel) 
 		self.y = self.y + self.speed_y*time.dt/1000
 		if coll[2] then
 			self.y = max(-self.i * terrain.h, self.y)
@@ -830,8 +901,10 @@ player = {
 			self.speed_y = min(self.speed_y, 0)
 			self.y = min(-(self.i-1) * terrain.h, self.y)
 		end
-		self.i = max(ceil(-self.y/terrain.h), 0) 
-		debugger.task[5] = self.i
+		if self.y < -(terrain.n+10)*terrain.h then 
+			self.y = 10*terrain.h 
+		end
+		self.i = mathFun.clamp(ceil(-self.y/terrain.h), 0, terrain.n) 
 
 		-- update position
 		local dx = mathFun.clamp(-abs(self.r-2.5*self.range)+1.5*self.range, 0, self.range)
@@ -870,11 +943,11 @@ player = {
 		-- left and right
 		if self.j == 1 then jm1 = 16 else jm1 = self.j-1 end
 		if self.j == 16 then jp1 = 1 else jp1 = self.j+1 end
-		coll[3] = terrain.data[self.i][self.j-1] ~= 0
-		coll[4] = terrain.data[self.i][self.j+1] ~= 0
-		if self.i > 1 then
-			coll[5] = terrain.data[self.i-1][self.j-1] ~= 0
-			coll[6] = terrain.data[self.i-1][self.j+1] ~= 0
+		coll[3] = terrain.data[self.i][jm1] ~= 0
+		coll[4] = terrain.data[self.i][jp1] ~= 0
+		if self.i > 1 and self.y + self.h > -(self.i-1) * terrain.h then
+			coll[5] = terrain.data[self.i-1][jm1] ~= 0
+			coll[6] = terrain.data[self.i-1][jp1] ~= 0
 		end
 		return coll
 	end,
@@ -911,6 +984,7 @@ background = {
 
 	c1 = Color.new(0x13, 0x27, 0x43),
 	c2 = Color.new(0x40, 0x70, 0x88),
+	stars = {},
 
 	scn = function(self, line)
 		local k = line/HEIGHT
@@ -922,7 +996,7 @@ background = {
 		for i = 1,15 do
 			local x = random(0, WIDTH)
 			local y = random(0, HEIGHT)
-			table.insert(self.stars, {x, y})
+			table.insert(self.stars, {x, y, t=random(2000)})
 		end
 	end,
 
@@ -930,7 +1004,8 @@ background = {
 		-- local t = time.t // 1000 % 2
 		for i = 1,#self.stars do
 			local x = mathFun.mod(self.stars[i][1] + camera.ay*100, WIDTH)
-			pix(x, self.stars[i][2], 12)
+			-- pix(x, self.stars[i][2], 12)
+			spr(261 + (self.stars[i].t+time.t)//2000 % 2, x, self.stars[i][2], 0)
 		end
 	end
 
@@ -943,7 +1018,6 @@ tree = {
 
 	load = function(self)
 		self.leaves = {}
-		-- math.randomseed(5)
 		for i = 2,4 do
 			local z = i*10
 			for j = 1,i^2 do
@@ -967,6 +1041,81 @@ tree = {
 
 }
 
+deco = {
+
+	-- mush
+	Sprite.new(276, terrain.w*Vec.new(0.8, 0, -0.2), 1, 1),
+	-- grass 
+	Sprite.new(277, terrain.w*Vec.new(-0.9, 0, 1.0), 1, 1),
+	Sprite.new(277, terrain.w*Vec.new(0, 0, -1), 1, 1),
+
+}
+
+transition = {
+
+	count = 30,
+	nframe = 30, 	-- number of frames
+	fun = nil,
+	n = 9,
+	m = 5,
+
+	update = function(self)
+		if keyp(20) then self.count = -self.nframe end
+		if self.count == 0 then 
+			if type(self.fun) == 'function' then self.fun() end  
+		end
+		self.count = self.count+1
+	end,
+
+	draw = function(self)
+		for i = 1,self.n do
+			local fac = self.count/self.nframe
+			local s = sin(mathFun.clamp(fac*PI+i/self.n*2, 0, PI))
+			for j = 1,self.m do
+				circ((i-1)*30, (j-1)*30, s*25-2, 3)
+			end
+		end
+	end,
+
+	wipe = function(self, fun)
+		self.fun = fun
+		self.count = -self.nframe 
+	end
+
+}
+
+vending = {
+
+	voxel = nil,
+
+	load = function(self)
+		local j = 2 
+		local k = 4
+		local dy = Vec.new(0, -1.2*terrain.h, 0)
+		local y = -1*dy
+		local u1 = terrain.mesh[j][k] + y + Vec.new(0, 0, terrain.w/3)
+		local u2 = terrain.mesh[j+1][k] + y + Vec.new(0, 0, terrain.w/3)
+		local u3 = terrain.mesh[j][k+1] + y
+		local u4 = terrain.mesh[j+1][k+1] + y
+		local v1 = u1 + dy
+		local v2 = u2 + dy
+		local v3 = u3 + dy
+		local v4 = u4 + dy
+		local f1 = Face.new({u1, u3, v1, v3}, {}, 6)
+		local f2 = Face.new({u3, u4, v3, v4}, {}, 6)
+		local f3 = Face.new({u4, u2, v4, v2}, {}, 6)
+		local f4 = Face.new({u2, u1, v2, v1}, {}, 6)
+		local f5 = Face.new({u1, u2, u3, u4}, uvs, 6)
+		local o = (u1+v4)/2
+		self.voxel = Voxel.new(f1, f2, f3, f4, f5, o)
+	end,
+
+	draw = function(self)
+		self.voxel:draw()
+	end
+
+}
+
 
 function SCN(line)
 
@@ -980,20 +1129,21 @@ camera:load()
 terrain:load()
 player:load()
 tree:load()
+vending:load()
 
 function TIC()
 
+	debugger:update()
 	time:update()
 	camera:update()
 	player:update()
-
+	transition:update()
+	
 	cls(15)
 	background:draw()
 	camera:drawTicks()
-	
 	terrain:draw()
-	-- player:draw()
-	-- tree:draw()
+	transition:draw()
 
 	-- debug
 	time:draw()
@@ -1011,10 +1161,6 @@ end
 -- 007:ddddddddddddddddddddddddddeeddddddeedddddddddddddddddddddddddddd
 -- 008:aaaaaaaaa9aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 -- 009:aaaaaaaaaaaaaa9aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
--- 010:5555555555555555555555555555555555555555555555555555555555555555
--- 011:5555555555555555555555555555555555555555555555555555555555555555
--- 012:5555555555555555555555555555555555555555555555555555555555555555
--- 013:5555555555555555555555555555555555555555555555555555555555555555
 -- 018:3333333333333333333333333333333333333333333333333333333333333333
 -- 019:3333333333333333333223333322223333322333333333333333333333333333
 -- 020:5555555555555555555555555555555555555555555555555555555555555555
@@ -1023,10 +1169,6 @@ end
 -- 023:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
 -- 024:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa9aaaaaaaaaaaaaa
 -- 025:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa9aaaaaaaaa
--- 026:5555555555555555555555555555555555555555555555555555555555555555
--- 027:5555555555555555555555555555555555555555555555555555555555555555
--- 028:5555555555555555555555555555555555555555555555555555555555555555
--- 029:5555555555555555555555555555555555555555555555555555555555555555
 -- 034:3333333355335533555555555555555566666666666666665555555555555555
 -- 035:3333333333353333335555555355555566666666666666665555555555555555
 -- 036:5555555555555555555555555555555566666666666666665555555555555555
@@ -1035,10 +1177,6 @@ end
 -- 039:ddddddddddddddddddddddddddddddddeeeeeeeeeeeeeeeedddddddddddddddd
 -- 040:aaaaaaaaa9aaaaaaaaaaaaaaaaa44444aaa44444aaa44aaaaaa44aaaaaaaaaa4
 -- 041:aaaaaaaaaaaaaa9aaaaaaaaa44444aaa44444aaaaaa44aaaaaa44aaa44444aaa
--- 042:5555555555555555555555555555555766667775666755555577555555777555
--- 043:5555555555555555555555557755555577776666777776665777755557777755
--- 044:55555555555555555555555c555555cb66666cbb6666cbbb555cbbbb55cbbbbb
--- 045:5555555555555555c5555555cc555555cac66666bcac6666bcaac555bbcaac55
 -- 050:6666666666666666666666666666666655555555555555555555555555555555
 -- 051:6666666666666666666666666666666655555555555555555555555555555555
 -- 052:6666666666666666666666666666666655555555555555555555555555555555
@@ -1047,10 +1185,6 @@ end
 -- 055:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeedddddddddddddddddddddddddddddddd
 -- 056:aaaaaaa4aaaaaaa4aaaaaaa4aaaaaaaaaaaaaaa4aaaaaaa4a9aaaaaaaaaaaaaa
 -- 057:44444aaa4aaaaaaa4aaaaaaaaaaaaaaa4aaaaaaa4aaaaaaaaaaaaa9aaaaaaaaa
--- 058:6677777566777777667777776667777655555775555555555555555555555555
--- 059:7777576655755766557757667577576677777555577755555555555555555555
--- 060:66cccbbb666caccb6666caac66666caa555555ca5555555c5555555555555555
--- 061:bbcccc66bcc9c666cc9c6666c9c66666cc555555c55555555555555555555555
 -- </TILES>
 
 -- <SPRITES>
@@ -1059,10 +1193,14 @@ end
 -- 002:0000000000000000000000990000099900009999000099990000999500009995
 -- 003:0000000000000000999000009999000099990000959900005559000055500000
 -- 004:0044440004555740456665744566657445666574456665740455574000444400
+-- 005:000000000000000000c000000000000000000000000000000000000000000000
+-- 006:0000000000c000000ccc000000c0000000000000000000000000000000000000
 -- 016:000422220004222f0004222f000422250004222f000042250000044500000004
 -- 017:52240000ff240000ff24000055240000ff240000254000004500000004000000
 -- 018:0000999900009998000099980000999500009998000099950000000500000000
 -- 019:5990000088900000889000005590000088900000959000000500000000000000
+-- 020:0000000000044000004774000427774004777240477777740445544000455400
+-- 021:0000000000000000000000000400040041404240041424140411214004112140
 -- 032:0000000000000000000000000000000000000000000000000000010000000011
 -- 033:0000000000000000000000010100000100100001001000010010001100011011
 -- 034:0000000000000000000000000000000010001000100010002001001120011100
@@ -1080,6 +1218,18 @@ end
 -- 081:0000011100001111000111110001111100001111000000110000000000000000
 -- 082:1222000012220000112220001122200011120000110000000000000000000000
 -- </SPRITES>
+
+-- <WAVES>
+-- 000:00000000ffffffff00000000ffffffff
+-- 001:0123456789abcdeffedcba9876543210
+-- 002:0123456789abcdef0123456789abcdef
+-- </WAVES>
+
+-- <SFX>
+-- 000:000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000300000000000
+-- 001:010001000100010001000100010001000100010001000100010001000100010001000100010001000100010001000100010001000100010001000100300000000000
+-- 002:020002000200020002000200020002000200020002000200020002000200020002000200020002000200020002000200020002000200020002000200300000000000
+-- </SFX>
 
 -- <PALETTE>
 -- 000:21193c15788c0b99a500b9beffeeccffb0a3ff8d8bff697329366f3b5dc941a6f673eff7f4f4f494b0c2566c86333c57
