@@ -574,7 +574,6 @@ terrain = {
 	data = {{}},
 	voxels = {{{}}},
 	order = {},
-	sprites = {{}},
 
 	mesh_id = {
 		{1,1}, {1,2}, {1,3}, {1,4},
@@ -597,7 +596,6 @@ terrain = {
 		-- math.randomseed(28)
 		self:loadData()
 		self:loadVoxels()
-		self:loadSprites()
 	end,
 
 	loadMesh = function(self)
@@ -632,16 +630,6 @@ terrain = {
 		self.data = data
 	end,
 
-	loadMap = function(self)
-		local n, m = self.data:size()
-		for i = 1,n do
-			for j = 1,m do
-				local id = self.tile_id[self.data[i][j]]
-				self:mset(i, j, id+32)
-			end
-		end
-	end,
-
 	loadVoxels = function(self)
 		local voxels = {}
 		local n = self.n 
@@ -671,58 +659,6 @@ terrain = {
 			end
 		end
 		self.order = order
-	end,
-
-	loadSprites = function(self)
-		local n, m = self.data:size()
-		local sprites = Mat.newZeros(n, m, 0)
-		for i = 2,n-1 do
-			for j = 1,m do
-				if self.data[i][j] == 0 and self.data[i+1][j] ~= 0 then
-					local a, b = table.unpack(self.mesh_id[j])
-					local o = self.mesh[a][b] + Vec.new(self.w/2, -i*self.h, self.w/2)
-					if random() > 0.5 then
-						sprites[i][j] = Sprite.new(260, o, 1, 1)
-					else
-						sprites[i][j] = 0
-					end
-				else
-					sprites[i][j] = 0
-				end
-			end
-		end
-		self.sprites = sprites
-	end,
-
-	draw = function(self)
-		local n = self.n 
-		local m = self.m
-		table.sort(self.order, self.sortOrder)
-		for _,v in ipairs(self.order) do
-			local j = v[2]
-			local k = v[3]
-			local data_id = self.data_id[j][k]
-			for i = n,1,-1 do
-				if self.voxels[i][j][k] ~= nil then
-					-- check if voxel is on screen
-					if self.voxels[i][j][k]:isonscreen() then
-						self.voxels[i][j][k]:draw()
-						-- draw sprite
-						if data_id ~= nil then
-							if self.sprites[i][data_id] ~= 0 then
-								self.sprites[i][data_id]:draw()
-							end
-						end
-					end
-				end
-				if i == player.i and data_id == player.j then player:draw() end
-			end
-			-- layer 0
-			if player.i == 0 and data_id == player.j then player:draw() end
-			if j == 3 and k == 3 then tree:draw() end
-			if j == 4 and k == 3 then deco[1]:draw() end
-			if j == 2 and k == 4 then vending:draw() end
-		end
 	end,
 
 	getVoxel = function(self, i, j, k)
@@ -795,10 +731,6 @@ terrain = {
 		return Vec.dot(camera.o, u[1]) < Vec.dot(camera.o, v[1])
 	end,
 
-	addlayer = function(self)
-
-	end
-
 }
 
 Sprite = {
@@ -846,6 +778,8 @@ player = {
 	jump_vel = 0,
 	h = 14,
 
+	ncoin = 10,
+
 	load = function(self)
 		self.r = 2 * self.range
 		self.o = Vec.new(self.range/2, 0, self.range/2)
@@ -883,7 +817,7 @@ player = {
 		
 		-- jump
 		coll = self:getCollision()
-		if keyp(48) then 
+		if keyp(48) or btnp(5) then 
 			self.speed_y = self.jump_vel
 		end
 		self.speed_y = mathFun.clamp(self.speed_y + self.gravity*time.dt/1000, -1.2*self.jump_vel, 1.2*self.jump_vel) 
@@ -962,6 +896,11 @@ player = {
 			end
 		end
 		return rwall, lwall
+	end,
+
+	drawHUD = function(self)
+		spr(260, 2, 2, 0)
+		print(self.ncoin, 12, 4, 4)
 	end
 
 }
@@ -1053,53 +992,12 @@ tree = {
 
 }
 
-deco = {
-
-	-- mush
-	Sprite.new(276, terrain.w*Vec.new(0.8, 0, -0.2), 1, 1),
-	-- grass 
-	Sprite.new(277, terrain.w*Vec.new(-0.9, 0, 1.0), 1, 1),
-	Sprite.new(277, terrain.w*Vec.new(0, 0, -1), 1, 1),
-
-}
-
-transition = {
-
-	count = 30,
-	nframe = 30, 	-- number of frames
-	fun = nil,
-	n = 9,
-	m = 5,
-
-	update = function(self)
-		if keyp(20) then self.count = -self.nframe end
-		if self.count == 0 then 
-			if type(self.fun) == 'function' then self.fun() end  
-		end
-		self.count = self.count+1
-	end,
-
-	draw = function(self)
-		for i = 1,self.n do
-			local fac = self.count/self.nframe
-			local s = sin(mathFun.clamp(fac*PI+i/self.n*2, 0, PI))
-			for j = 1,self.m do
-				circ((i-1)*30, (j-1)*30, s*25-2, 3)
-			end
-		end
-	end,
-
-	wipe = function(self, fun)
-		self.fun = fun
-		self.count = -self.nframe 
-	end
-
-}
-
 vending = {
 
 	voxel = nil,
 	faces = {},
+	ison = false,
+	ncoin = 0,
 
 	load = function(self)
 		local j = 2 
@@ -1125,12 +1023,29 @@ vending = {
 		self.faces = {f21, f22}
 	end,
 
+	update = function(self)
+		self.ison = false 
+		if player.j == 6 then 
+			if player.i == 0 and player.y < 9/7*terrain.h then
+				self.ison = true 
+			end
+		end 
+		if btnp(4) then
+			if self.ison then 
+				if player.ncoin > 0 then 
+					player.ncoin = player.ncoin - 1 
+					self.ncoin = self.ncoin + 1
+				end
+			end
+		end
+	end,
+
 	draw = function(self)
 		self.voxel.f1:drawTex(2)
 		self.voxel.f3:drawTex(2)
 		self.voxel.f4:drawTex(2)
 		self.voxel.f5:drawTex(2)
-		if player.i == 0 and player.j == 6 then
+		if self.ison then
 			self.faces[2]:drawTex(2)
 		else
 			self.faces[1]:drawTex(2)
@@ -1139,18 +1054,31 @@ vending = {
 
 }
 
-shop = {
+loot = {
 
-	open = false,
-	dialogs = {},
+	data = {{}},
 
-	update = function(self)
-		if keyp(5) then self.open = not self.open end
+	load = function(self)
+		local n, m = terrain.data:size()
+		local data = {}
+		for i = 1,n do
+			data[i] = {}
+		end
+		for i = 2,n-1 do
+			for j = 1,m do
+				if terrain.data[i][j] == 0 and terrain.data[i+1][j] ~= 0 then
+					local a, b = table.unpack(terrain.mesh_id[j])
+					local o = terrain.mesh[a][b] + Vec.new(terrain.w/2, -i*terrain.h, terrain.w/2)
+					data[i][j] = mathFun.randlist({nil, Sprite.new(260, o, 1, 1)})
+				end
+			end
+		end
+		self.data = data
 	end,
 
-	draw = function(self)
-		if self.open then spr(96, 120-64, 10, 0, 2, 0, 0, 8, 8) end
-	end,
+	zsort = function(u, v)
+		return Vec.dot(camera.o, u.o) < Vec.dot(camera.o, v.o)
+	end
 
 }
 
@@ -1161,6 +1089,45 @@ function SCN(line)
 
 end
 
+function draw()
+	local n = terrain.n 
+	local m = terrain.m
+	table.sort(terrain.order, terrain.sortOrder)
+	for _,v in ipairs(terrain.order) do
+		local j = v[2]
+		local k = v[3]
+		local data_id = terrain.data_id[j][k]
+		for i = n,1,-1 do
+			if terrain.voxels[i][j][k] ~= nil then
+				-- check if voxel is on screen
+				if terrain.voxels[i][j][k]:isonscreen() then
+					terrain.voxels[i][j][k]:draw()
+					-- draw sprite
+					if data_id ~= nil then
+						if loot.data[i][data_id] ~= nil then
+							loot.data[i][data_id]:draw()
+						end
+					end
+				end
+			end
+			if i == player.i and data_id == player.j then
+				if loot.data[i][data_id] ~= nil then
+					local temp = {loot.data[i][data_id], player}
+					table.sort(temp, loot.zsort)
+					temp[1]:draw()
+					temp[2]:draw()
+				else  
+					player:draw()
+				end
+			end
+		end
+		-- layer 0
+		if player.i == 0 and data_id == player.j then player:draw() end
+		if j == 3 and k == 3 then tree:draw() end
+		if j == 2 and k == 4 then vending:draw() end
+	end
+end
+
 
 background:load()
 camera:load()
@@ -1168,6 +1135,7 @@ terrain:load()
 player:load()
 tree:load()
 vending:load()
+loot:load()
 
 
 function TIC()
@@ -1176,15 +1144,14 @@ function TIC()
 	time:update()
 	camera:update()
 	player:update()
-	-- transition:update()
-	-- shop:update()
+	vending:update()
 	
 	cls(15)
 	background:draw()
 	camera:drawTicks()
-	terrain:draw()
-	-- transition:draw()
-	-- shop:draw()
+	-- terrain:draw()
+	draw()
+	player:drawHUD()
 
 	-- debug
 	time:draw()
@@ -1232,78 +1199,6 @@ end
 -- 083:5566666655666666556666665566666355666632666626226266222222222222
 -- 084:6666666666666666666555662665556626655566236666662326666622326666
 -- 085:6666000066660000666600006666000066660000666300006662000066220000
--- 096:0022222202223222223335552233525523322555235555552255555525555555
--- 097:2222222255555255555555555555555555555555555555555555555555555555
--- 098:2222222252222222555552225555555555555555555555555555555555555555
--- 099:2222222222555555255555555555555555555555555555555555555555555555
--- 100:2222222255555522555555525555555555555555555555555555555555555555
--- 101:2222222222222225222555555555555555555555555555555555555555555555
--- 102:2222222252222225555555555555555555555555555555555555555555555555
--- 103:2222220055222220555522225555522255555522555555225555555255555552
--- 112:2555555525555555255555552555555522555555332555552333222222333223
--- 113:5555555555555555555555555555555555555555555522255222222222223333
--- 114:5555555555555555555555555555555555555555555555525522222223333333
--- 115:5555555555555555555555555555555552555555222555552222222233233333
--- 116:5555555555555555555555555555555555555525555552222222222233333233
--- 117:5555555555555555555555555555555555555555255555552222225533333332
--- 118:5555555555555555555555555555555555555555555555222552222223333332
--- 119:5555752255574722555573225553322255532223253322332233323332233333
--- 128:2222222222226222222226662226666622666666222666662226666622266666
--- 129:2222222222222222622666666266666666666666666666666666666666666666
--- 130:2222222222222622222666666626666666266666666666666666666666666666
--- 131:2222222262222666666266666662666666626666666666666666666666666666
--- 132:2222222222222622222666666626666666266666666666666666666666666666
--- 133:2222222262222666666266666662666666626666666666666666666666666666
--- 134:2222222262666222666666626666666666666666666666666666666666666666
--- 135:2222233322222223226222222222222222262222222222222222222233222222
--- 144:2266644422664444226644442226444422264444222644442266444422664444
--- 145:4444444444444444444444444444444444444444444444444444444444444444
--- 146:4444444444444444444444444444444444444444444444444444444444444444
--- 147:4444444444444444444444444444444444444444444444444444444444444444
--- 148:4444444444444444444444444444444444444444444444444444444444444444
--- 149:4444444444444444444444444444444444444444444444444444444444444444
--- 150:4444444444444444444444444444444444444444444444444444444444444444
--- 151:4322222243242222432462224434662244446622444466234444662244446622
--- 160:2266444422664444226644442266444422664444226644442266444422664444
--- 161:4444444444444444444444444444444444444444444444444444444444444444
--- 162:4444444444444444444444444444444444444444444444444444444444444444
--- 163:4444444444444444444444444444444444444444444444444444444444444444
--- 164:4444444444444444444444444444444444444444444444444444444444444444
--- 165:4444444444444444444444444444444444444444444444444444444444444444
--- 166:4444444444444444444444444444444444444444444444444444444444444444
--- 167:4444666244446662444466624444666244446622444466224444662244446622
--- 176:2266444422664444226644442266444422664444226644442266444422664444
--- 177:4444444444444444444444444444444444444444444444444444444444444444
--- 178:4444444444444444444444444444444444444444444444444444444444444444
--- 179:4444444444444444444444444444444444444444444444444444444444444444
--- 180:4444444444444444444444444444444444444444444444444444444444444444
--- 181:4444444444444444444444444444444444444444444444444444444444444444
--- 182:4444444444444444444444444444444444444444444444444444444444444444
--- 183:4444666244446662444466624444666244446622444466224444662244446622
--- 192:2666444426664444266644442666444426664444266644442266344422666333
--- 193:4444444444444444444444444444444444444444444444444444444433333333
--- 194:4444444444444444444444444444444444444444444444444444444433335355
--- 195:4444444444444444444444444444444444444444444444444444444455555555
--- 196:4444444444444444444444444444444444444444444444444444444433335355
--- 197:4444444444444444444444444444444444444444444444444444444455555555
--- 198:4444444444444444444444444444444444444444444444444444444455555555
--- 199:4444662244446622444466224444662244446662444466224445662255566622
--- 208:2226662222266622226666222266662222666552226655522265555226555552
--- 209:2222222222226622225666622255666625555666255556665555556655555556
--- 210:2666666666666666666666666666666666666666666666666666666666666666
--- 211:6666666666666666666666666666666666666666666666666666666666666666
--- 212:2666666666666666666666666666666666666666666666666666666666666666
--- 213:6666666666666666666666666666666666666666666666666666666666666666
--- 214:66666666666666666666666666666666666555666655e5566555e5556555e555
--- 215:6666662266666622666662226666622266662222666622226666662266666662
--- 224:2655555226655555266655552266655522666655226666662266666622666666
--- 225:5555555655555566555566665566666666666666666666666666666666666666
--- 226:6666666666666666666666666666666666666666666666556666555566655555
--- 227:6666666666666666666666666656666655566666555566665555566655555566
--- 228:6666666666666666666666666666666666666666666666666666666666666666
--- 229:6666666666666666666666666666666666666666666666666666666666666666
--- 230:6555e5556655e556666555666666666666666666666666666666666666666666
--- 231:6666566266666662666666526666565266665652666655526665555266555552
 -- </TILES>
 
 -- <SPRITES>
@@ -1336,14 +1231,6 @@ end
 -- 066:2200000022000000220000001220000012200000122000001220000012200000
 -- 081:0000011100001111000111110001111100001111000000110000000000000000
 -- 082:1222000012220000112220001122200011120000110000000000000000000000
--- 096:000000000004400400433443004324420043244200432cc20043ccc2004ccccc
--- 097:00000000400000003400000034000000344000003cc400003ccd4000ccddd400
--- 098:0004400400433443004324420043244200432cc20043ccc2004ccccc04dccccc
--- 099:400000003400000034000000344000003cc400003ccd4000ccddd400ccdddd00
--- 112:04dccccc04eccecc04becbcc04deeccc04ddddcc004ddddd0004444400000000
--- 113:ccdddd40cccdddc4ccccddc4ccccccc4ccccccc4ddcccc404444440000000000
--- 114:04eccecc04becbcc04deeccc04dddccc04ddddcc004ddddd0004444400000000
--- 115:cccddd40cccddd40ccccdd40cccccc40cccccc40ddcccc404444440000000000
 -- </SPRITES>
 
 -- <WAVES>
