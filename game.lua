@@ -479,6 +479,7 @@ camera = {
 	ay = 0,
 	target_y2 = 0,
 	y2 = 0,
+	offset_y2 = 0,
 
 	tick_x = 190,
 	tick_y = H2-3,
@@ -498,10 +499,10 @@ camera = {
 		self.x = Vec.new(1, 0, 0):rotate(self.ax, self.ay, 0)
 		self.y = Vec.new(0, 1, 0):rotate(self.ax, self.ay, 0)
 		-- vertical motion
-		-- if key(23) then self.target_y2 = self.target_y2 + 1 end
-		-- if key(19) then self.target_y2 = self.target_y2 - 1 end
-		self.target_y2 = player.i * terrain.h*cos(self.ax)
-		-- self.target_y2 = -player.y
+		if key(23) then self.offset_y2 = self.offset_y2 + 1 end
+		if key(19) then self.offset_y2 = self.offset_y2 - 1 end
+		-- self.target_y2 = player.i * terrain.h*cos(self.ax) + self.offset_y2
+		self.target_y2 = -player.y*cos(self.ax)
 		self.y2 = mathFun.lerp(self.lerp_fac, self.y2, self.target_y2)
 	end,
 
@@ -521,7 +522,7 @@ camera = {
 
 Voxel = {
 
-	render_radius = 16,
+	render_radius = 13,
 
 	new = function(f1, f2, f3, f4, f5, o, r)
 		if r == nil then r = Voxel.render_radius end
@@ -564,7 +565,7 @@ Voxel = {
 
 terrain = {
 
-	n = 10, 	-- height
+	n = 7, 	-- height
 	m = 5,		-- depth
 	w = 12*sqrt2,		-- voxel width (12)
 	h = 28/sqrt(3),		-- voxel height (14)
@@ -594,7 +595,8 @@ terrain = {
 	load = function(self)
 		self:loadMesh()
 		-- math.randomseed(28)
-		self:loadData()
+		-- self:loadData()
+		self.data = maze.generate(self.n, 16)
 		self:loadVoxels()
 	end,
 
@@ -731,6 +733,11 @@ terrain = {
 		return Vec.dot(camera.o, u[1]) < Vec.dot(camera.o, v[1])
 	end,
 
+	reload = function(self)
+		self.data = maze.generate(self.n, 16)
+		self:loadVoxels()
+	end
+
 }
 
 Sprite = {
@@ -829,8 +836,12 @@ player = {
 			self.speed_y = min(self.speed_y, 0)
 			self.y = min(-(self.i-1) * terrain.h, self.y)
 		end
-		if self.y < -(terrain.n+10)*terrain.h then 
+		if self.y < -(terrain.n+10)*terrain.h then
+			local dy = camera.y2 - camera.target_y2 
 			self.y = 10*terrain.h 
+			camera.target_y2 = -self.y*cos(camera.ax)
+			camera.y2 = camera.target_y2 + dy
+			terrain:reload()
 		end
 		self.i = mathFun.clamp(ceil(-self.y/terrain.h), 0, terrain.n) 
 
@@ -1082,6 +1093,93 @@ loot = {
 
 }
 
+maze = {
+
+	generate = function(n, m)
+		local A = {}
+		for i = 1,n do
+			A[i] = {}
+			for j = 1,m do
+				A[i][j] = mathFun.randlist({2, 2, 2, 3})
+			end
+		end
+		setmetatable(A, Mat.mt)
+		-- Randomized depth-first search
+		local stack = {{2*random(1, (n-1)/2), 2*random(1, m/2) - 1}}
+		while #stack > 0 do
+			local current = table.remove(stack, #stack)
+			local neighbours = maze.getneighbours(A, current[1], current[2])
+			if #neighbours > 0 then
+				local new = maze.randbias(neighbours)
+				if new[3] == 1 then A[current[1]][current[2]+1] = 0 
+				elseif new[3] == 2 then 
+					local jm1
+					if current[2] == 1 then jm1 = 16 else jm1 = current[2]-1 end
+					A[current[1]][jm1] = 0 
+				elseif new[3] == 3 then A[current[1]-1][current[2]] = 0 
+				elseif new[3] == 4 then A[current[1]+1][current[2]] = 0 
+				end
+				A[new[1]][new[2]] = 0
+				table.insert(stack, current)
+				table.insert(stack, new)
+			end
+		end
+		-- start and end
+		A[1][13] = 0
+		A[n][5] = 0 
+		return A
+	end,
+
+	getneighbours = function(A, i, j)
+		local n, m = A:size()
+		local neighbours = {}
+		local jp2, jm2 
+		if j == 15 then jp2 = 1 else jp2 = j+2 end
+		if j == 1 then jm2 = 15 else jm2 = j-2 end
+		if A[i][jp2] ~= 0 then 
+			table.insert(neighbours, {i, jp2, 1})		-- right
+		end
+		if A[i][jm2] ~= 0 then 
+			table.insert(neighbours, {i, jm2, 2})		-- left
+		end
+		if i ~= 2 then
+			if A[i-2][j] ~= 0 then
+				table.insert(neighbours, {i-2, j, 3}) 	-- up
+			end
+		end
+		if i ~= n-1 then 
+			if A[i+2][j] ~= 0 then
+				table.insert(neighbours, {i+2, j, 4}) 	-- down
+			end
+		end
+		return neighbours
+	end,
+
+	randbias = function(t)
+		local temp = {}
+		for i,v in ipairs(t) do
+			if v[3] < 3 then 
+				table.insert(temp, v)
+				table.insert(temp, v)
+				table.insert(temp, v)
+			else
+				table.insert(temp, v)
+			end
+		end
+		return mathFun.randlist(temp)
+	end,
+
+	beautify = function(A)
+		local n, m = A:size()
+		for i = 1,n do
+			for j = 1,m do
+
+			end
+		end
+	end 
+
+}
+
 
 function SCN(line)
 
@@ -1142,14 +1240,13 @@ function TIC()
 
 	debugger:update()
 	time:update()
-	camera:update()
 	player:update()
+	camera:update()
 	vending:update()
 	
 	cls(15)
 	background:draw()
 	camera:drawTicks()
-	-- terrain:draw()
 	draw()
 	player:drawHUD()
 
