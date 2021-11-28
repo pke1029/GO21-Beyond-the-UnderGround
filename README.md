@@ -1,7 +1,11 @@
 # Beyond the UnderGround 
+An entry to the GitHub Game Off 2021 game jam. 
 
-An entry to the GitHub Game Off 2021 game jam.
-
-![](media/screen22.png)
+![](media/screen23.gif)
 
 ![](media/screen17.gif)
+
+## Credit
+* Programming and art by me 
+* Music and writing by @starling [Twitter](https://twitter.com/starlingoboe)
+* Title art by @im_erique_k [Instagram](https://www.instagram.com/im_erique_k/)
