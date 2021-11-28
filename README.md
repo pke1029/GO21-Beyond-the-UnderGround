@@ -1,3 +1,4 @@
-# Beyond Under Ground 
+# Beyond the UnderGround 
 
-Entry to the Game Off 2021 game jam.
+An entry to the GitHub Game Off 2021 game jam.
+
