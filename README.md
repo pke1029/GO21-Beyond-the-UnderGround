@@ -8,6 +8,7 @@ An entry to the GitHub Game Off 2021 game jam.
 * Custom 3D renderer and efficient voxel sorting algorithm. 
 * Procedurally generated maze. 
 * Particle effect modified from PSLIB by @viza.
+* 3D model for the butterfly particles. 
 
 ![](media/screen17.gif)
 
