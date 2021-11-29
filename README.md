@@ -5,10 +5,11 @@ An entry to the GitHub Game Off 2021 game jam.
 
 ## Features
 * Made with TIC-80 fantasy console.  
-* Custom 3D renderer and efficient voxel sorting algorithm. 
+* Custom 3D renderer and a (somewhat) efficient voxel sorting algorithm. 
 * Procedurally generated maze. 
 * Particle system modified from PSLIB by @viza.
 * 3D model for the butterfly particles. 
+* Spaghetti code 
 
 ![](media/screen17.gif)
 
