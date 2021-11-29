@@ -1,5 +1,5 @@
 # Beyond the UnderGround 
-An entry to the GitHub Game Off 2021 game jam. 
+An entry to the GitHub Game Off 2021 game jam. Available to play here https://pke1029.itch.io/beyond-the-underground
 
 ![](media/screen23.gif)
 
