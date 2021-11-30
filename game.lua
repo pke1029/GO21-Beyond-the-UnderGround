@@ -31,8 +31,10 @@ time = {
 	count = 0,
 	fps = 60,
 	ts = 0,
+	show = false,
 
 	update = function(self)
+		if keyp(20) then self.show = not self.show end
 		local t = systime()
 		self.dt = t - self.t
 		self.t = t
@@ -47,7 +49,9 @@ time = {
 	end,
 
 	draw = function(self)
-		print(self.fps, 228, 1, 4, true)
+		if self.show then
+			print(self.fps, 228, 1, 4, true)
+		end
 	end
 
 }
@@ -470,20 +474,15 @@ Face = {
 				return self
 			end,
 
-			draw = function(self, col, bcol)
+			draw = function(self)
 				local x1, y1 = self.verts[1]:proj(camera)
 				local x2, y2 = self.verts[2]:proj(camera)
 				local x3, y3 = self.verts[3]:proj(camera)
-				local x4, y4 = self.verts[4]:proj(camera)
 				if Face.isccw(x1, y1, x2, y2, x3, y3) then return end
-				if col == nil then col = self.col end
-				tri(x1, y1, x2, y2, x3, y3, col)
-				tri(x2, y2, x3, y3, x4, y4, col)
-				if bcol == nil then
-					Face.border(x1, y1, x2, y2, x3, y3, x4, y4, 8)
-				elseif bcol ~= 0 then
-					Face.border(x1, y1, x2, y2, x3, y3, x4, y4, bcol)
-				end
+				local x4, y4 = self.verts[4]:proj(camera)
+				tri(x1, y1, x2, y2, x3, y3, self.col)
+				tri(x2, y2, x3, y3, x4, y4, self.col)
+				Face.border(x1, y1, x2, y2, x3, y3, x4, y4, 8)
 			end,
 
 		}
@@ -717,30 +716,53 @@ terrain = {
 		if data_id ~= nil then
 			local type = self.data[i][data_id]
 			local voxel = voxeltype[type](u1, u2, u3, u4, v1, v2, v3, v4)
+			-- remove inner
 			if mathFun.isin(data_id, {2, 3, 4}) then voxel.f3 = nil
 			elseif mathFun.isin(data_id, {6, 7, 8}) then voxel.f4 = nil
 			elseif mathFun.isin(data_id, {10, 11, 12}) then voxel.f1 = nil
-			elseif mathFun.isin(data_id, {14, 15, 16}) then voxel.f2 = nil
+			elseif mathFun.isin(data_id, {14, 15, 16}) then voxel.f2 = nil end
+			-- remove adjacent 
+			if mathFun.isin(data_id, {2, 3, 4, 5}) then 
+				if self.data[i][data_id-1] ~= 0 then voxel.f4 = nil end
+			elseif mathFun.isin(data_id, {6, 7, 8, 9}) then 
+				if self.data[i][data_id-1] ~= 0 then voxel.f1 = nil end
+			elseif mathFun.isin(data_id, {10, 11, 12, 13}) then 
+				if self.data[i][data_id-1] ~= 0 then voxel.f2 = nil end
+			elseif mathFun.isin(data_id, {14, 15, 16}) then 
+				if self.data[i][data_id-1] ~= 0 then voxel.f3 = nil end
 			end
+			if mathFun.isin(data_id, {1, 2, 3, 4}) then 
+				if self.data[i][data_id+1] ~= 0 then voxel.f2 = nil end
+			elseif mathFun.isin(data_id, {5, 6, 7, 8}) then 
+				if self.data[i][data_id+1] ~= 0 then voxel.f3 = nil end
+			elseif mathFun.isin(data_id, {9, 10, 11, 12}) then 
+				if self.data[i][data_id+1] ~= 0 then voxel.f4 = nil end
+			elseif mathFun.isin(data_id, {13, 14, 15}) then 
+				if self.data[i][data_id+1] ~= 0 then voxel.f1 = nil end
+			end
+			-- remove top
 			if i > 1 and self.data[i-1][data_id] ~= 0 then voxel.f5 = nil end
 			return voxel
 		elseif j == 3 and k == 3 then 
 			-- center column
 			return nil
 		else
-			-- local type = mathFun.randlist({2,3})
 			local type = 3
 			local col = self.color_id[type]
-			-- local tile = self.tile_id[type]
-			-- local uvs = {tile*8, 16, (tile+2)*8, 32}
 			local uvs = {}
 			local f1, f2, f3, f4, f5
-			if j == 2 then f1 = Face.new({u1, u3, v1, v3}, uvs, col) end
-			if j == 4 then f3 = Face.new({u4, u2, v4, v2}, uvs, col) end
-			if k == 2 then f4 = Face.new({u2, u1, v2, v1}, uvs, col) end
-			if k == 4 then f2 = Face.new({u3, u4, v3, v4}, uvs, col) end
-			-- tile = 2
-			-- uvs = {tile*8, 0, (tile+2)*8, 16}
+			if j == 2 and self.data[i][self.data_id[j-1][k]] == 0 then
+				f1 = Face.new({u1, u3, v1, v3}, uvs, col) 
+			end
+			if j == 4 and self.data[i][self.data_id[j+1][k]] == 0 then 
+				f3 = Face.new({u4, u2, v4, v2}, uvs, col) 
+			end
+			if k == 2 and self.data[i][self.data_id[j][k-1]] == 0 then 
+				f4 = Face.new({u2, u1, v2, v1}, uvs, col) 
+			end
+			if k == 4 and self.data[i][self.data_id[j][k+1]] == 0 then 
+				f2 = Face.new({u3, u4, v3, v4}, uvs, col) 
+			end
 			if i == 1 then f5 = Face.new({u1, u2, u3, u4}, uvs, 3) end
 			return Voxel.new(f1, f2, f3, f4, f5, o)
 		end
@@ -852,7 +874,7 @@ player = {
 	jump_vel = 0,
 	h = 14,
 
-	ncoin = 0,
+	ncoin = 15,
 
 	load = function(self)
 		self.r = 2 * self.range
@@ -1721,7 +1743,9 @@ dialog = {
 	convo = {
 		{col={4, 3}, "...", "Hello!", "It's me.", "Did you miss me?", "I missed you;&you were gone&for so long."},
 		{col={4, 3}, "I'm not&expecting you&to remember&who I am.", "After all, it's&been so long&since you even&let yourself&look in my&direction.", "But guess&what...", "Today's your&lucky day!", "Don't be&worried.", "Even though&you don't&remember me&now, you will...&soon."},
-		{col={4, 3}, "I'm a little&scared that&you won't&recognise me&when you see&me.", "But sometimes&you have to&let yourself&climb down,&to grow up.", "Or grow up, &to go down...", "I'm not making&any sense.", "Anyway,&let yourself&climb down.", "To know you&have something,&you have to&lose it first.", "But you haven't&lost me."}
+		-- {col={4, 3}, "I'm a little&scared that&you won't&recognise me&when you see&me.", "But sometimes&you have to&let yourself&climb down,&to grow up.", "Or grow up, &to go down...", "I'm not making&any sense.", "Anyway,&let yourself&climb down.", "To know you&have something,&you have to&lose it first.", "But you haven't&lost me."},
+		{col={4, 3}, "You're doing&great. Keep&climbing down.", "Sometimes you&have to let&yourself climb&down, to grow&up.", "Or grow up,&to go down&deep...", "To find your&own tranquil&ocean of&butterflies.", "After all, to&know you had&something, you&have to lose&it first.", "But you haven't&lost me."},
+		{""}
 	},
 	stray = {col={4, 3}, "Are you getting&thirsty from all&this jumping?", "You could try&checking out&the vending&machine...", "That is,&if you haven't&done so&already."},
 	bank = {
@@ -1739,7 +1763,7 @@ dialog = {
 		{"It's as though&they are your&younger selves,&flying free."},
 		{"They are&notched into&you now.", "You breathe&butterfly&dreams, tear&up at the&sight of all&that blue."},
 		{"Fall further,&fly farther."},
-		{col={4, 3}, "Welcome back!", "It's good&to see you."}
+		{col={4, 3}, "Welcome back!", "It's so good&to see you."}
 	},
 	credit = {"", "CREDIT", "&Programming&and Art&by pke1029", "&Music and&Writing&by starling", "&Title art&by im_erique_k", "&Thank you&for playing!"},
 	co = nil,
@@ -1764,7 +1788,7 @@ dialog = {
 		self.t = self.t + 1
 		if self.t == 100 then
 			self:show(self.convo[self.current])
-			self.current = mathFun.clamp(self.current + 1, 1, 3)
+			self.current = mathFun.clamp(self.current + 1, 1, 4)
 		elseif self.t == 10000 and coroutine.status(self.co) == "dead" then 
 			self:show(self.stray)
 		end
@@ -1811,7 +1835,41 @@ dialog = {
 				dialog.waiting = true
 			end
 			local count = 0
-			-- while not (keyp(48) or btnp(4)) and count < 200 do 
+			while not (vending.ison and (keyp(48) or btnp(4))) and count < 200 do 
+			-- while count < 200 do 
+				count = count + 1
+				coroutine.yield()
+			end
+		end
+		dialog.text = {}
+	end,
+
+	speak2 = function(lines)
+		dialog.waiting = false
+		if type(lines.col) ~= "table" then 
+			dialog.col1, dialog.col2 = 4, 6
+		else
+			dialog.col1, dialog.col2 = table.unpack(lines.col)
+		end
+		for i = 1,#lines do 
+			dialog.text = {""}
+			local k = 1
+			for j = 1,#lines[i] do
+				local c = lines[i]:sub(j,j)
+				if c == "&" then
+					k = k+1 
+					dialog.text[k] = "" 
+				else
+					dialog.text[k] = dialog.text[k] .. c 
+				end
+				coroutine.yield()
+				coroutine.yield()
+				-- coroutine.yield()
+			end
+			if i == #lines then
+				dialog.waiting = true
+			end
+			local count = 0
 			while count < 200 do 
 				count = count + 1
 				coroutine.yield()
@@ -1853,7 +1911,7 @@ function draw()
 			if terrain.voxels[i][j][k] ~= nil then
 				-- check if voxel is on screen
 				if terrain.voxels[i][j][k]:isonscreen() then
-					terrain.voxels[i][j][k]:drawTex()
+					terrain.voxels[i][j][k]:draw()
 				end
 				-- draw sprite
 				if data_id ~= nil then
@@ -1905,7 +1963,9 @@ scene = {
 		if vending.ncoin == 15 then
 			if coroutine.status(dialog.co) == "dead" then
 				vending.ncoin = 1
-				dialog:show(dialog.credit)
+				-- dialog:show(dialog.credit)
+				dialog.co = coroutine.create(dialog.speak2) 
+				coroutine.resume(dialog.co, dialog.credit)
 				scene.current = scene.tic_ending 
 			end
 		end
@@ -1966,6 +2026,11 @@ scene = {
 		camera.x = Vec.new(1, 0, 0):rotate(camera.ax, camera.ay, 0)
 		camera.y = Vec.new(0, 1, 0):rotate(camera.ax, camera.ay, 0)
 		camera.x2 = mathFun.lerp(camera.lerp_fac, camera.x2, camera.target_x2)
+		if btn(2) then camera.y2 = camera.y2 + 0.5 end
+		if btn(3) then camera.y2 = camera.y2 - 0.5 end
+		-- if camera.y2 > terrain.h*terrain.n + 130 then camera.y2 = -150 end
+		-- if camera.y2 < -150 then camera.y2 = terrain.h*terrain.n + 130 end
+		camera.y2 = mathFun.clamp(camera.y2, -20, terrain.h*terrain.n-20)
 		-- update boids
 		for _,b in ipairs(boid.particles) do
 			b.isfront = (camera.o[1]*b.o[1] + camera.o[3]*b.o[3]) > 0
@@ -2018,7 +2083,7 @@ function TIC()
 	-- debug
 	time:draw()
 	-- camera:drawTicks()
-	debugger:draw()
+	-- debugger:draw()
 
 end
 
