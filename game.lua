@@ -874,7 +874,7 @@ player = {
 	jump_vel = 0,
 	h = 14,
 
-	ncoin = 15,
+	ncoin = 0,
 
 	load = function(self)
 		self.r = 2 * self.range
