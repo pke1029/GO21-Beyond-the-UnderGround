@@ -1,5 +1,5 @@
 # Beyond the UnderGround 
-An entry to the GitHub Game Off 2021 game jam. Available to play here https://pke1029.itch.io/beyond-the-underground
+An entry for the GitHub Game Off 2021 game jam. Available to play here https://pke1029.itch.io/beyond-the-underground
 
 ![](media/screen23.gif)
 
@@ -9,7 +9,6 @@ An entry to the GitHub Game Off 2021 game jam. Available to play here https://pk
 * Procedurally generated maze. 
 * Particle system modified from PSLIB by @viza.
 * 3D model for the butterfly particles. 
-* Spaghetti code 
 
 ![](media/screen17.gif)
 
